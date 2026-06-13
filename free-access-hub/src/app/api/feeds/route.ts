@@ -1,14 +1,23 @@
 import { NextResponse } from 'next/server';
 import Parser from 'rss-parser';
 
-const parser = new Parser();
+const parser = new Parser({
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/110.0 FreeAccessHub/1.0'
+  }
+});
 
 const feeds = [
   { url: 'https://dev.to/feed/tag/giveaway', category: 'Swag & Goodies' },
-  { url: 'https://www.reddit.com/r/freebies/.rss', category: 'Freebies' },
+  { url: 'https://dev.to/feed/tag/opensource', category: 'Open Source' },
   { url: 'https://dev.to/feed/tag/events', category: 'Tech Events' },
   { url: 'https://dev.to/feed/tag/hackathon', category: 'Hackathons' },
-  { url: 'https://www.reddit.com/r/WebDeveloperJobs/.rss', category: 'Opportunities' }
+  { url: 'https://www.reddit.com/r/freebies/.rss', category: 'Freebies' },
+  { url: 'https://www.reddit.com/r/UdemyFreebies/.rss', category: 'Free Courses' },
+  { url: 'https://www.reddit.com/r/FreeEBOOKS/.rss', category: 'Free Books' },
+  { url: 'https://hnrss.org/newest?q=hackathon', category: 'Hackathons' },
+  { url: 'https://hnrss.org/newest?q=meetup', category: 'Tech Events' },
+  { url: 'https://www.reddit.com/r/csmajors/.rss', category: 'Opportunities' }
 ];
 
 export const revalidate = 60;

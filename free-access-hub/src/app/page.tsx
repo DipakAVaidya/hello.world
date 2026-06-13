@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Calendar, Gift, Terminal, MapPin, ExternalLink, RefreshCw, AlertTriangle, Beer } from "lucide-react";
+import { Calendar, Gift, Terminal, MapPin, ExternalLink, RefreshCw, AlertTriangle, BookOpen, Code, GraduationCap } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 type FeedItem = {
@@ -72,8 +72,12 @@ export default function Home() {
         return <Calendar className="w-5 h-5 text-blue-400" />;
       case "Hackathons":
         return <Terminal className="w-5 h-5 text-green-400" />;
-      case "Nightlife":
-        return <Beer className="w-5 h-5 text-pink-400" />;
+      case "Free Courses":
+        return <GraduationCap className="w-5 h-5 text-orange-400" />;
+      case "Free Books":
+        return <BookOpen className="w-5 h-5 text-indigo-400" />;
+      case "Open Source":
+        return <Code className="w-5 h-5 text-emerald-400" />;
       default:
         return <MapPin className="w-5 h-5 text-gray-400" />;
     }
@@ -120,21 +124,21 @@ export default function Home() {
                 <Calendar className="w-6 h-6 text-blue-400" />
                 <h2 className="text-xl font-bold text-white">Big Tech Meetups</h2>
              </div>
-             <p className="text-gray-400 text-sm leading-relaxed mb-4">Monitor Luma, Dev.events, and Meetup.com. Look for Generative AI, Full-Stack, and Cloud Native tags. Register early as a &quot;System Engineer&quot; for priority.</p>
+             <p className="text-gray-400 text-sm leading-relaxed mb-4">Monitor Hacker News, Dev.to, and Reddit. Look for Generative AI, Full-Stack, and Cloud Native tags. Register early as a &quot;System Engineer&quot; for priority.</p>
           </div>
-          <div className="bg-gray-900/80 p-6 rounded-2xl border border-gray-800/50 hover:border-pink-500/30 transition-all duration-300">
+          <div className="bg-gray-900/80 p-6 rounded-2xl border border-gray-800/50 hover:border-orange-500/30 transition-all duration-300">
              <div className="flex items-center gap-3 mb-4">
-                <Beer className="w-6 h-6 text-pink-400" />
-                <h2 className="text-xl font-bold text-white">Nightlife & Clubs</h2>
+                <GraduationCap className="w-6 h-6 text-orange-400" />
+                <h2 className="text-xl font-bold text-white">Free Courses & Open Source</h2>
              </div>
-             <p className="text-gray-400 text-sm leading-relaxed mb-4">Use apps like HighApe or GuestInMe by Thursday. Arrive by 8:30 PM absolute latest to beat the cover charge cutoff for couples/ladies lists.</p>
+             <p className="text-gray-400 text-sm leading-relaxed mb-4">Grab premium Udemy tech courses for free, find technical eBooks, and discover open source projects to contribute to and grow your skills.</p>
           </div>
           <div className="bg-gray-900/80 p-6 rounded-2xl border border-gray-800/50 hover:border-purple-500/30 transition-all duration-300">
              <div className="flex items-center gap-3 mb-4">
                 <Gift className="w-6 h-6 text-purple-400" />
                 <h2 className="text-xl font-bold text-white">DevRel Swag</h2>
              </div>
-             <p className="text-gray-400 text-sm leading-relaxed mb-4">Join beta-testing programs and virtual hackathons (Devpost). Even valid submissions that don&apos;t win often get cloud credits ($50-$100) or physical swag.</p>
+             <p className="text-gray-400 text-sm leading-relaxed mb-4">Join beta-testing programs and virtual hackathons. Even valid submissions that don&apos;t win often get cloud credits ($50-$100) or physical swag.</p>
           </div>
         </section>
 
