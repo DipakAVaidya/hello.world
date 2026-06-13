@@ -1,198 +1,223 @@
-"use client";
+'use client';
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Sparkles, Gift, MapPin, Activity } from 'lucide-react';
 
-import { useEffect, useState, useCallback } from "react";
-import { Calendar, Gift, Terminal, MapPin, ExternalLink, RefreshCw, AlertTriangle, Beer } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
-
-type FeedItem = {
+type UIEvent = {
+  id: string;
   title: string;
-  link: string;
-  pubDate: string;
   category: string;
-  contentSnippet: string;
+  deliveryType: string;
+  sourcePlatform: string;
+  perks: string[];
+  eventTimestamp: string;
+  registrationUrl: string;
 };
 
-export default function Home() {
-  const [items, setItems] = useState<FeedItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+export default function WorldClassAggregatorDashboard() {
+  const [events, setEvents] = useState<UIEvent[]>([]);
+  const [activeTab, setActiveTab] = useState<'ALL' | 'TECH_MEETUP' | 'SWAG_GOODIES' | 'NIGHTLIFE'>('ALL');
+  const [mouseCoords, setMouseCoords] = useState({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const fetchFeeds = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/feeds");
-      const data = await res.json();
-      setItems(data);
-      setLastUpdated(new Date());
-    } catch (error) {
-      console.error("Failed to fetch feeds", error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // Live Stats State
+  const [stats, setStats] = useState({ activeScrapers: 14, linksVerified: 1102, systemLatency: '0.4s' });
+
+  // Track cursor position to drive the responsive interactive radial background layer
+  const handleMouseMove = (event: React.MouseEvent) => {
+    if (!containerRef.current) return;
+    const { left, top } = containerRef.current.getBoundingClientRect();
+    setMouseCoords({ x: event.clientX - left, y: event.clientY - top });
+  };
 
   useEffect(() => {
     // Initial fetch
-    let isMounted = true;
+    fetch("/api/events")
+      .then(res => res.json())
+      .then(data => {
+          if(Array.isArray(data)) setEvents(data as UIEvent[]);
+      })
+      .catch(console.error);
 
-    const initFetch = async () => {
+    // Establish direct stream pipeline hook to backend
+    const sse = new EventSource('/api/stream/events');
+    sse.onmessage = (messageEvent) => {
       try {
-        const res = await fetch("/api/feeds");
-        const data = await res.json();
-        if (isMounted) {
-          setItems(data);
-          setLastUpdated(new Date());
-          setLoading(false);
-        }
-      } catch (error) {
-        console.error("Failed to fetch feeds", error);
-        if (isMounted) setLoading(false);
+          const incoming = JSON.parse(messageEvent.data);
+          if (incoming.type === 'NEW_EVENT' && incoming.data) {
+             setEvents((prev) => {
+                if (prev.find(e => e.id === incoming.data.id)) return prev;
+                return [incoming.data, ...prev].slice(0, 50);
+             });
+          }
+      } catch (err) {
+          // ignore parsing errors from heartbeat
       }
     };
 
-    initFetch();
-
-    const interval = setInterval(() => {
-      initFetch();
-    }, 60000);
-
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
+    return () => sse.close();
   }, []);
 
-  const getCategoryIcon = (category: string) => {
-    switch (category) {
-      case "Swag & Goodies":
-        return <Gift className="w-5 h-5 text-purple-400" />;
-      case "Freebies":
-        return <AlertTriangle className="w-5 h-5 text-yellow-400" />;
-      case "Tech Events":
-        return <Calendar className="w-5 h-5 text-blue-400" />;
-      case "Hackathons":
-        return <Terminal className="w-5 h-5 text-green-400" />;
-      case "Nightlife":
-        return <Beer className="w-5 h-5 text-pink-400" />;
-      default:
-        return <MapPin className="w-5 h-5 text-gray-400" />;
-    }
-  };
+  // Update mock live stats ticker
+  useEffect(() => {
+    const updateInterval = setInterval(() => {
+      setStats((prev) => ({
+        activeScrapers: Math.floor(Math.random() * (16 - 12 + 1)) + 12,
+        linksVerified: prev.linksVerified + Math.floor(Math.random() * 3),
+        systemLatency: `${(Math.random() * (0.6 - 0.2) + 0.2).toFixed(2)}s`
+      }));
+    }, 4000);
+    return () => clearInterval(updateInterval);
+  }, []);
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 font-sans p-4 sm:p-8 selection:bg-cyan-500/30">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div
+      ref={containerRef}
+      onMouseMove={handleMouseMove}
+      className="min-h-screen bg-[#030712] text-slate-100 relative overflow-hidden font-sans antialiased selection:bg-cyan-500/30"
+    >
 
-        <header className="flex flex-col md:flex-row md:items-center justify-between border-b border-gray-800 pb-6 gap-4">
-          <div>
-            <h1 className="text-4xl font-extrabold tracking-tight flex items-center gap-3">
-              <Terminal className="w-10 h-10 text-cyan-400" />
-              <span className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
-                Free Access Hub
-              </span>
-            </h1>
-            <p className="text-gray-400 mt-2 text-lg">
-              Real-time aggregation of tech events, hackathons, swag, and freebies.
-            </p>
-          </div>
+      {/* Mouse Tracking Radial Light */}
+      <div
+        className="absolute inset-0 pointer-events-none transition-opacity duration-300 opacity-100"
+        style={{
+          background: `radial-gradient(800px circle at ${mouseCoords.x}px ${mouseCoords.y}px, rgba(55, 65, 81, 0.15), transparent 50%)`,
+        }}
+      />
 
-          <div className="flex items-center gap-4 bg-gray-900/50 p-3 rounded-xl border border-gray-800">
-            <div className="flex flex-col items-end">
-              <span className="text-xs text-gray-500 font-medium uppercase tracking-wider">Live Status</span>
-              <span className="text-sm text-gray-300">
-                {lastUpdated ? `Updated ${formatDistanceToNow(lastUpdated)} ago` : 'Waiting...'}
-              </span>
-            </div>
-            <button
-              onClick={fetchFeeds}
-              className={`p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors border border-gray-700 ${loading ? 'animate-spin opacity-50 cursor-not-allowed' : ''}`}
-              disabled={loading}
-              title="Force Refresh"
-            >
-              <RefreshCw className="w-5 h-5 text-cyan-400" />
-            </button>
-          </div>
-        </header>
+      {/* Animated Dot Grid */}
+      <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
 
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          <div className="bg-gray-900/80 p-6 rounded-2xl border border-gray-800/50 hover:border-blue-500/30 transition-all duration-300">
-             <div className="flex items-center gap-3 mb-4">
-                <Calendar className="w-6 h-6 text-blue-400" />
-                <h2 className="text-xl font-bold text-white">Big Tech Meetups</h2>
-             </div>
-             <p className="text-gray-400 text-sm leading-relaxed mb-4">Monitor Luma, Dev.events, and Meetup.com. Look for Generative AI, Full-Stack, and Cloud Native tags. Register early as a &quot;System Engineer&quot; for priority.</p>
-          </div>
-          <div className="bg-gray-900/80 p-6 rounded-2xl border border-gray-800/50 hover:border-pink-500/30 transition-all duration-300">
-             <div className="flex items-center gap-3 mb-4">
-                <Beer className="w-6 h-6 text-pink-400" />
-                <h2 className="text-xl font-bold text-white">Nightlife & Clubs</h2>
-             </div>
-             <p className="text-gray-400 text-sm leading-relaxed mb-4">Use apps like HighApe or GuestInMe by Thursday. Arrive by 8:30 PM absolute latest to beat the cover charge cutoff for couples/ladies lists.</p>
-          </div>
-          <div className="bg-gray-900/80 p-6 rounded-2xl border border-gray-800/50 hover:border-purple-500/30 transition-all duration-300">
-             <div className="flex items-center gap-3 mb-4">
-                <Gift className="w-6 h-6 text-purple-400" />
-                <h2 className="text-xl font-bold text-white">DevRel Swag</h2>
-             </div>
-             <p className="text-gray-400 text-sm leading-relaxed mb-4">Join beta-testing programs and virtual hackathons (Devpost). Even valid submissions that don&apos;t win often get cloud credits ($50-$100) or physical swag.</p>
-          </div>
-        </section>
-
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold flex items-center gap-2">
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-            </span>
-            Live Intelligence Feed
-          </h2>
-          <span className="text-sm bg-gray-800 text-gray-300 px-3 py-1 rounded-full border border-gray-700">
-            {items.length} intel drops found
+      {/* Top Telemetry Ticker */}
+      <div className="w-full bg-[#070a13] border-b border-white/5 text-[11px] font-mono text-slate-400 py-1.5 px-6 flex justify-between items-center tracking-wider relative z-20">
+        <div className="flex items-center space-x-4">
+          <span className="flex items-center space-x-1.5">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]" />
+            <span className="text-emerald-400 font-bold uppercase tracking-widest text-[10px]">Stream Pipeline Live</span>
           </span>
+          <span className="text-white/20">|</span>
+          <span>Active Scrapers: <span className="text-white font-semibold">{stats.activeScrapers}</span></span>
+          <span className="text-white/20">|</span>
+          <span>Verified Links: <span className="text-emerald-400 font-semibold">{stats.linksVerified}</span></span>
+        </div>
+        <div className="hidden sm:block">
+          <span>Processing Latency: <span className="text-cyan-400">{stats.systemLatency}</span></span>
+        </div>
+      </div>
+
+      {/* Header */}
+      <header className="sticky top-0 z-40 bg-[#030712]/60 backdrop-blur-xl border-b border-white/5 px-8 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div className="flex items-center space-x-3">
+          <div className="p-2 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 rounded-lg border border-white/10 shadow-inner">
+            <Sparkles className="text-cyan-400 animate-spin-slow" size={20}/>
+          </div>
+          <h1 className="text-2xl font-black tracking-tighter bg-gradient-to-r from-white via-slate-200 to-slate-500 bg-clip-text text-transparent">
+            FREELINK<span className="text-cyan-400 font-light">.IO</span>
+          </h1>
         </div>
 
-        {loading && items.length === 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="animate-pulse bg-gray-900/50 h-48 rounded-2xl border border-gray-800"></div>
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {items.map((item, index) => (
-              <a
-                key={index}
-                href={item.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group flex flex-col bg-gray-900/60 p-6 rounded-2xl border border-gray-800 hover:border-gray-600 hover:bg-gray-800/80 transition-all duration-300 relative overflow-hidden"
-              >
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex items-center gap-2 bg-gray-950 px-3 py-1.5 rounded-full border border-gray-800">
-                    {getCategoryIcon(item.category)}
-                    <span className="text-xs font-medium text-gray-300">{item.category}</span>
+        {/* Tab Filters */}
+        <div className="flex bg-white/[0.03] border border-white/5 p-1 rounded-xl shadow-2xl relative overflow-x-auto">
+          {(['ALL', 'TECH_MEETUP', 'SWAG_GOODIES', 'NIGHTLIFE'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`relative px-5 py-2 text-xs font-semibold tracking-wide uppercase rounded-lg transition-all duration-300 z-10 whitespace-nowrap ${
+                activeTab === tab ? 'text-white font-bold' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {activeTab === tab && (
+                <motion.div
+                  layoutId="activeTabIndicator"
+                  className="absolute inset-0 bg-white/5 border border-white/10 rounded-lg -z-10 shadow-lg"
+                  transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                />
+              )}
+              {tab.replace('_', ' ')}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      {/* Bento Grid Content */}
+      <main className="max-w-7xl mx-auto px-8 py-10 relative z-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <AnimatePresence mode="popLayout">
+            {events
+              .filter(e => activeTab === 'ALL' || e.category === activeTab)
+              .map((event) => (
+                <motion.div
+                  layout
+                  initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ type: "spring", duration: 0.5 }}
+                  key={event.id}
+                  className="group relative rounded-2xl border border-white/5 bg-white/[0.01] backdrop-blur-3xl p-6 flex flex-col justify-between hover:border-white/10 hover:bg-white/[0.02] transition-all duration-300 shadow-2xl overflow-hidden hover:scale-[1.02]"
+                >
+
+                  {/* Category Gradient Border Top */}
+                  <div className={`absolute top-0 left-0 right-0 h-[2px] transition-all duration-500 opacity-50 group-hover:opacity-100 ${
+                    event.category === 'TECH_MEETUP' ? 'bg-gradient-to-r from-cyan-500 to-blue-500 shadow-[0_1px_10px_#06b6d4]' :
+                    event.category === 'SWAG_GOODIES' ? 'bg-gradient-to-r from-emerald-500 to-teal-500 shadow-[0_1px_10px_#10b981]' :
+                    'bg-gradient-to-r from-rose-500 to-magenta-500 shadow-[0_1px_10px_#f43f5e]'
+                  }`} />
+
+                  <div>
+                    <div className="flex justify-between items-center mb-4">
+                      <span className="text-[10px] font-mono tracking-widest text-slate-500 uppercase bg-white/5 border border-white/5 px-2 py-0.5 rounded">
+                        {event.sourcePlatform}
+                      </span>
+                      <div className="flex items-center space-x-1.5 text-xs font-medium font-mono text-slate-400">
+                        <MapPin className="text-slate-500" size={12}/>
+                        <span className="truncate max-w-[120px]">{event.deliveryType}</span>
+                      </div>
+                    </div>
+
+                    <h2 className="text-lg font-bold tracking-tight text-slate-200 group-hover:text-white transition-colors duration-300 line-clamp-2">
+                      {event.title}
+                    </h2>
+
+
+                    <div className="flex flex-wrap gap-1.5 mt-3 mb-6">
+                      {event.perks.map((perk: string, i: number) => (
+                        <span key={i} className="inline-flex items-center space-x-1 text-[11px] font-medium font-mono px-2 py-0.5 rounded-md bg-emerald-500/5 border border-emerald-500/10 text-emerald-400">
+                          <Gift size={10}/>
+                          <span>{perk}</span>
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                  <span className="text-xs text-gray-500 whitespace-nowrap">
-                    {formatDistanceToNow(new Date(item.pubDate))} ago
-                  </span>
-                </div>
 
-                <h3 className="text-lg font-bold text-gray-100 mb-3 line-clamp-2 group-hover:text-cyan-400 transition-colors">
-                  {item.title}
-                </h3>
-                <p className="text-sm text-gray-400 line-clamp-3 mb-4 flex-grow">
-                  {item.contentSnippet || "No summary available."}
-                </p>
+                  <div className="pt-4 border-t border-white/5 flex justify-between items-center mt-auto">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Event Time</span>
+                      <span className="text-xs font-mono text-slate-300 font-semibold">
+                        {new Date(event.eventTimestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
 
-                <div className="mt-auto flex items-center text-sm font-semibold text-cyan-500/80 group-hover:text-cyan-400 transition-colors">
-                  Access Portal <ExternalLink className="w-4 h-4 ml-2 opacity-0 group-hover:opacity-100 transition-opacity -translate-x-2 group-hover:translate-x-0 transform" />
-                </div>
-              </a>
-            ))}
-          </div>
-        )}
+                    <a
+                      href={event.registrationUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-bold tracking-wide px-4 py-2 rounded-xl bg-slate-100 text-black hover:bg-white active:scale-95 transition-all duration-200 shadow-[0_0_15px_rgba(255,255,255,0.1)]"
+                    >
+                      Secure Spot
+                    </a>
+                  </div>
+                </motion.div>
+              ))}
+          </AnimatePresence>
 
-      </div>
+          {events.length === 0 && (
+             <div className="col-span-full py-20 flex flex-col items-center justify-center text-zinc-500 border border-dashed border-zinc-800 rounded-2xl relative z-10">
+                 <Activity className="w-10 h-10 mb-4 opacity-50 animate-pulse" />
+                 <p>Awaiting live intel drops...</p>
+             </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 }

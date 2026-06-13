@@ -1,0 +1,49 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DeliveryType {
+  ONSITE
+  VIRTUAL
+  HYBRID
+}
+
+enum EventCategory {
+  TECH_MEETUP
+  SWAG_GOODIES
+  NIGHTLIFE
+}
+
+model UnifiedEvent {
+  id               String        @id @default(uuid())
+  title            String
+  description      String?
+  sourcePlatform   String        // "GDG", "CNCF", "Luma", "Reddit"
+  category         EventCategory
+  deliveryType     DeliveryType
+  perks            String[]      // ["Free Food", "Swag Kit", "AWS Credits"]
+  eventTimestamp   DateTime
+  registrationUrl  String
+
+  // Location Metrics
+  venueName        String?       // "Microsoft Signature Office", "Zoom Link"
+  latitude         Float?
+  longitude        Float?
+  city             String?       // Normalized lowercase index
+
+  // Real-time Activity Tracks
+  spotsRemaining   Int?
+  gateClosureTime  DateTime?
+  isActive         Boolean       @default(true)
+  spamScore        Int           @default(0)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([city, category, deliveryType])
+  @@index([eventTimestamp])
+}
