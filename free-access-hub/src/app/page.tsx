@@ -1,7 +1,8 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Gift, MapPin, Activity, Search } from 'lucide-react';
+import { Sparkles, Gift, MapPin, Activity, Search, Filter } from 'lucide-react';
+import { formatDistanceToNow } from "date-fns";
 
 type UIEvent = {
   id: string;
@@ -19,9 +20,10 @@ export default function WorldClassAggregatorDashboard() {
   const [events, setEvents] = useState<UIEvent[]>([]);
   const [activeTab, setActiveTab] = useState<'ALL' | 'TECH_MEETUP' | 'SWAG_GOODIES' | 'NIGHTLIFE'>('ALL');
 
-  // New Filter States
+  // Filters & Sorting
   const [cityFilter, setCityFilter] = useState('');
   const [deliveryFilter, setDeliveryFilter] = useState<'ALL' | 'ONSITE' | 'VIRTUAL'>('ALL');
+  const [sortBy, setSortBy] = useState<'Date (Newest)' | 'Perks (High to Low)'>('Date (Newest)');
 
   const [mouseCoords, setMouseCoords] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
@@ -70,12 +72,17 @@ export default function WorldClassAggregatorDashboard() {
     return () => clearInterval(updateInterval);
   }, []);
 
-  // Compute Filtered Events
+  // Compute Filtered and Sorted Events
   const displayedEvents = events.filter(e => {
       const matchCategory = activeTab === 'ALL' || e.category === activeTab;
       const matchDelivery = deliveryFilter === 'ALL' || e.deliveryType === deliveryFilter;
       const matchCity = cityFilter === '' || (e.city && e.city.toLowerCase().includes(cityFilter.toLowerCase()));
       return matchCategory && matchDelivery && matchCity;
+  }).sort((a, b) => {
+      if (sortBy === 'Perks (High to Low)') {
+          return (b.perks?.length || 0) - (a.perks?.length || 0);
+      }
+      return new Date(b.eventTimestamp).getTime() - new Date(a.eventTimestamp).getTime();
   });
 
   return (
@@ -127,7 +134,7 @@ export default function WorldClassAggregatorDashboard() {
            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 group-focus-within:text-cyan-400 transition-colors" />
            <input
               type="text"
-              placeholder="Search by city (e.g. Bangalore, Global)"
+              placeholder="Search by city (e.g. Bangalore, Mumbai, San Francisco)"
               value={cityFilter}
               onChange={(e) => setCityFilter(e.target.value)}
               className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-9 pr-4 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
@@ -157,21 +164,35 @@ export default function WorldClassAggregatorDashboard() {
         </div>
       </header>
 
-      {/* Sub-Header Filters */}
-      <div className="max-w-7xl mx-auto px-8 pt-6 pb-2 relative z-10 flex gap-2">
-         {(['ALL', 'ONSITE', 'VIRTUAL'] as const).map(type => (
-            <button
-               key={type}
-               onClick={() => setDeliveryFilter(type)}
-               className={`px-4 py-1.5 rounded-full text-xs font-semibold tracking-wider transition-colors border ${
-                 deliveryFilter === type
-                 ? 'bg-slate-100 text-slate-900 border-transparent'
-                 : 'bg-transparent text-slate-400 border-white/10 hover:border-white/30 hover:text-white'
-               }`}
+      {/* Sub-Header Filters & Sorting */}
+      <div className="max-w-7xl mx-auto px-8 pt-6 pb-2 relative z-10 flex flex-wrap justify-between items-center gap-4">
+         <div className="flex gap-2">
+           {(['ALL', 'ONSITE', 'VIRTUAL'] as const).map(type => (
+              <button
+                 key={type}
+                 onClick={() => setDeliveryFilter(type)}
+                 className={`px-4 py-1.5 rounded-full text-xs font-semibold tracking-wider transition-colors border ${
+                   deliveryFilter === type
+                   ? 'bg-slate-100 text-slate-900 border-transparent'
+                   : 'bg-transparent text-slate-400 border-white/10 hover:border-white/30 hover:text-white'
+                 }`}
+              >
+                 {type}
+              </button>
+           ))}
+         </div>
+
+         <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-slate-500" />
+            <select
+               value={sortBy}
+               onChange={(e) => setSortBy(e.target.value as "Date (Newest)" | "Perks (High to Low)")}
+               className="bg-zinc-900 border border-white/10 rounded-lg text-xs font-medium text-slate-300 px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-cyan-500"
             >
-               {type}
-            </button>
-         ))}
+               <option value="Date (Newest)">Sort by Date (Newest)</option>
+               <option value="Perks (High to Low)">Sort by Perks (High to Low)</option>
+            </select>
+         </div>
       </div>
 
       {/* Bento Grid Content */}
@@ -203,7 +224,7 @@ export default function WorldClassAggregatorDashboard() {
                       </span>
                       <div className="flex items-center space-x-1.5 text-xs font-medium font-mono text-slate-400">
                         <MapPin className="text-slate-500" size={12}/>
-                        <span className="truncate max-w-[120px]">{event.deliveryType}</span>
+                        <span className="truncate max-w-[120px] capitalize">{event.city || event.deliveryType}</span>
                       </div>
                     </div>
 
@@ -213,7 +234,7 @@ export default function WorldClassAggregatorDashboard() {
 
 
                     <div className="flex flex-wrap gap-1.5 mt-3 mb-6">
-                      {event.perks.map((perk: string, i: number) => (
+                      {event.perks?.map((perk: string, i: number) => (
                         <span key={i} className="inline-flex items-center space-x-1 text-[11px] font-medium font-mono px-2 py-0.5 rounded-md bg-emerald-500/5 border border-emerald-500/10 text-emerald-400">
                           <Gift size={10}/>
                           <span>{perk}</span>
