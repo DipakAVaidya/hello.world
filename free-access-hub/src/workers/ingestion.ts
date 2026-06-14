@@ -98,7 +98,6 @@ export async function ingestHNAlgolia() {
         }
         return count;
     } catch (err: unknown) {
-        console.error('HN Ingestion blocked ->', (err as Error).message);
         return 0;
     }
 }
@@ -143,7 +142,6 @@ export async function ingestProductHuntRSS() {
         }
         return count;
     } catch (err: unknown) {
-        console.error('PH Ingestion blocked ->', (err as Error).message);
         return 0;
     }
 }
@@ -194,7 +192,6 @@ export async function ingestDevpostAPI() {
         }
         return count;
     } catch (err: unknown) {
-        console.error('Devpost API Ingestion blocked ->', (err as Error).message);
         return 0;
     }
 }
@@ -243,7 +240,6 @@ export async function ingestRedditJSON() {
         }
         return count;
     } catch (err: unknown) {
-        console.error('Reddit Ingestion blocked ->', (err as Error).message);
         return 0;
     }
 }
@@ -291,7 +287,149 @@ export async function ingestGithubIssues() {
         }
         return count;
     } catch (err: unknown) {
-        console.error('GitHub Ingestion blocked ->', (err as Error).message);
+        return 0;
+    }
+}
+
+export async function ingestCNCFEvents() {
+    try {
+        console.log("Fetching CNCF Events...");
+        const response = await axios.get('https://community.cncf.io/api/event/', {
+             headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        const items = response.data.results || [];
+        let count = 0;
+
+        for (const item of items.slice(0, 5)) {
+            if (!item.title || !item.url || item.status !== 'Published') continue;
+
+            const spamScore = calculateSpamRating(item.title, '');
+            if (spamScore > 30) continue;
+
+            const id = hashEvent(item.title, 'CNCF');
+            const eventTimestamp = item.start_date ? new Date(item.start_date) : new Date();
+
+            const upsertedEvent = await prisma.unifiedEvent.upsert({
+                where: { id },
+                update: { updatedAt: new Date(), isActive: true },
+                create: {
+                    id,
+                    title: `${item.title}`,
+                    sourcePlatform: 'CNCF',
+                    category: 'TECH_MEETUP',
+                    deliveryType: 'ONSITE',
+                    perks: ['Networking', 'Swag Potential'],
+                    eventTimestamp,
+                    registrationUrl: item.url,
+                    venueName: 'CNCF Chapter',
+                    city: item.chapter?.city || 'global',
+                    spamScore
+                }
+            });
+
+            if (upsertedEvent.createdAt.getTime() === upsertedEvent.updatedAt.getTime() || (Date.now() - upsertedEvent.updatedAt.getTime() < 10000)) {
+                count++;
+                await redis.publish('events:live', JSON.stringify({ type: 'NEW_EVENT', data: upsertedEvent }));
+            }
+        }
+        return count;
+    } catch (err: unknown) {
+        return 0;
+    }
+}
+
+export async function ingestGDGEvents() {
+    try {
+        console.log("Fetching GDG Events...");
+        const response = await axios.get('https://gdg.community.dev/api/event/', {
+             headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        const items = response.data.results || [];
+        let count = 0;
+
+        for (const item of items.slice(0, 5)) {
+            if (!item.title || !item.url || item.status !== 'Published') continue;
+
+            const spamScore = calculateSpamRating(item.title, '');
+            if (spamScore > 30) continue;
+
+            const id = hashEvent(item.title, 'GDG');
+            const eventTimestamp = item.start_date ? new Date(item.start_date) : new Date();
+
+            const upsertedEvent = await prisma.unifiedEvent.upsert({
+                where: { id },
+                update: { updatedAt: new Date(), isActive: true },
+                create: {
+                    id,
+                    title: `${item.title}`,
+                    sourcePlatform: 'GDG',
+                    category: 'TECH_MEETUP',
+                    deliveryType: 'ONSITE',
+                    perks: ['Google Tech', 'Swag Kit'],
+                    eventTimestamp,
+                    registrationUrl: item.url,
+                    venueName: 'GDG Chapter',
+                    city: item.chapter?.city || 'global',
+                    spamScore,
+                    spotsRemaining: null
+                }
+            });
+
+            if (upsertedEvent.createdAt.getTime() === upsertedEvent.updatedAt.getTime() || (Date.now() - upsertedEvent.updatedAt.getTime() < 10000)) {
+                count++;
+                await redis.publish('events:live', JSON.stringify({ type: 'NEW_EVENT', data: upsertedEvent }));
+            }
+        }
+        return count;
+    } catch (err: unknown) {
+        return 0;
+    }
+}
+
+export async function ingestAtlassianEvents() {
+    try {
+        console.log("Fetching Atlassian Events...");
+        const response = await axios.get('https://ace.atlassian.com/api/event/', {
+             headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        const items = response.data.results || [];
+        let count = 0;
+
+        for (const item of items.slice(0, 5)) {
+            if (!item.title || !item.url || item.status !== 'Published') continue;
+
+            const spamScore = calculateSpamRating(item.title, '');
+            if (spamScore > 30) continue;
+
+            const id = hashEvent(item.title, 'Atlassian');
+            const eventTimestamp = item.start_date ? new Date(item.start_date) : new Date();
+
+            const upsertedEvent = await prisma.unifiedEvent.upsert({
+                where: { id },
+                update: { updatedAt: new Date(), isActive: true },
+                create: {
+                    id,
+                    title: `${item.title}`,
+                    sourcePlatform: 'Atlassian',
+                    category: 'TECH_MEETUP',
+                    deliveryType: 'ONSITE',
+                    perks: ['Networking', 'Atlassian Swag'],
+                    eventTimestamp,
+                    registrationUrl: item.url,
+                    venueName: 'Atlassian ACE Chapter',
+                    city: item.chapter?.city || 'global',
+                    spamScore,
+                    spotsRemaining: null
+                }
+            });
+
+            if (upsertedEvent.createdAt.getTime() === upsertedEvent.updatedAt.getTime() || (Date.now() - upsertedEvent.updatedAt.getTime() < 10000)) {
+                count++;
+                await redis.publish('events:live', JSON.stringify({ type: 'NEW_EVENT', data: upsertedEvent }));
+            }
+        }
+        return count;
+    } catch (err: unknown) {
         return 0;
     }
 }
@@ -332,7 +470,8 @@ export async function ingestHighApe() {
                         registrationUrl: fullUrl,
                         venueName: 'Bangalore Club',
                         city: 'bangalore',
-                        spamScore
+                        spamScore,
+                        spotsRemaining: null
                     }
                 });
 
@@ -344,7 +483,6 @@ export async function ingestHighApe() {
         }
         return count;
     } catch (err: unknown) {
-        console.error('HighApe Ingestion blocked ->', (err as Error).message);
         return 0;
     }
 }
@@ -365,6 +503,12 @@ const worker = new Worker('ingestion-queue', async job => {
         total += await ingestGithubIssues();
         await delay(3000);
         total += await ingestHighApe();
+        await delay(3000);
+        total += await ingestCNCFEvents();
+        await delay(3000);
+        total += await ingestGDGEvents();
+        await delay(3000);
+        total += await ingestAtlassianEvents();
 
         console.log(`Ingestion cycle complete. Published ${total} active events.`);
     } else if (job.name === 'validate-links') {
