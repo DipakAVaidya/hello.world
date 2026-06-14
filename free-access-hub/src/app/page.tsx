@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Gift, MapPin, Activity } from 'lucide-react';
+import { Sparkles, Gift, MapPin, Activity, Search } from 'lucide-react';
 
 type UIEvent = {
   id: string;
@@ -12,18 +12,22 @@ type UIEvent = {
   perks: string[];
   eventTimestamp: string;
   registrationUrl: string;
+  city?: string | null;
 };
 
 export default function WorldClassAggregatorDashboard() {
   const [events, setEvents] = useState<UIEvent[]>([]);
   const [activeTab, setActiveTab] = useState<'ALL' | 'TECH_MEETUP' | 'SWAG_GOODIES' | 'NIGHTLIFE'>('ALL');
+
+  // New Filter States
+  const [cityFilter, setCityFilter] = useState('');
+  const [deliveryFilter, setDeliveryFilter] = useState<'ALL' | 'ONSITE' | 'VIRTUAL'>('ALL');
+
   const [mouseCoords, setMouseCoords] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Live Stats State
   const [stats, setStats] = useState({ activeScrapers: 14, linksVerified: 1102, systemLatency: '0.4s' });
 
-  // Track cursor position to drive the responsive interactive radial background layer
   const handleMouseMove = (event: React.MouseEvent) => {
     if (!containerRef.current) return;
     const { left, top } = containerRef.current.getBoundingClientRect();
@@ -31,7 +35,6 @@ export default function WorldClassAggregatorDashboard() {
   };
 
   useEffect(() => {
-    // Initial fetch
     fetch("/api/events")
       .then(res => res.json())
       .then(data => {
@@ -39,7 +42,6 @@ export default function WorldClassAggregatorDashboard() {
       })
       .catch(console.error);
 
-    // Establish direct stream pipeline hook to backend
     const sse = new EventSource('/api/stream/events');
     sse.onmessage = (messageEvent) => {
       try {
@@ -47,18 +49,16 @@ export default function WorldClassAggregatorDashboard() {
           if (incoming.type === 'NEW_EVENT' && incoming.data) {
              setEvents((prev) => {
                 if (prev.find(e => e.id === incoming.data.id)) return prev;
-                return [incoming.data, ...prev].slice(0, 50);
+                return [incoming.data, ...prev].slice(0, 100);
              });
           }
       } catch (err) {
-          // ignore parsing errors from heartbeat
       }
     };
 
     return () => sse.close();
   }, []);
 
-  // Update mock live stats ticker
   useEffect(() => {
     const updateInterval = setInterval(() => {
       setStats((prev) => ({
@@ -70,6 +70,14 @@ export default function WorldClassAggregatorDashboard() {
     return () => clearInterval(updateInterval);
   }, []);
 
+  // Compute Filtered Events
+  const displayedEvents = events.filter(e => {
+      const matchCategory = activeTab === 'ALL' || e.category === activeTab;
+      const matchDelivery = deliveryFilter === 'ALL' || e.deliveryType === deliveryFilter;
+      const matchCity = cityFilter === '' || (e.city && e.city.toLowerCase().includes(cityFilter.toLowerCase()));
+      return matchCategory && matchDelivery && matchCity;
+  });
+
   return (
     <div
       ref={containerRef}
@@ -77,7 +85,6 @@ export default function WorldClassAggregatorDashboard() {
       className="min-h-screen bg-[#030712] text-slate-100 relative overflow-hidden font-sans antialiased selection:bg-cyan-500/30"
     >
 
-      {/* Mouse Tracking Radial Light */}
       <div
         className="absolute inset-0 pointer-events-none transition-opacity duration-300 opacity-100"
         style={{
@@ -85,7 +92,6 @@ export default function WorldClassAggregatorDashboard() {
         }}
       />
 
-      {/* Animated Dot Grid */}
       <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
 
       {/* Top Telemetry Ticker */}
@@ -116,6 +122,18 @@ export default function WorldClassAggregatorDashboard() {
           </h1>
         </div>
 
+        {/* Global Omni-Search Toggle */}
+        <div className="flex-1 max-w-md w-full relative group">
+           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 group-focus-within:text-cyan-400 transition-colors" />
+           <input
+              type="text"
+              placeholder="Search by city (e.g. Bangalore, Global)"
+              value={cityFilter}
+              onChange={(e) => setCityFilter(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-9 pr-4 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
+           />
+        </div>
+
         {/* Tab Filters */}
         <div className="flex bg-white/[0.03] border border-white/5 p-1 rounded-xl shadow-2xl relative overflow-x-auto">
           {(['ALL', 'TECH_MEETUP', 'SWAG_GOODIES', 'NIGHTLIFE'] as const).map((tab) => (
@@ -139,13 +157,28 @@ export default function WorldClassAggregatorDashboard() {
         </div>
       </header>
 
+      {/* Sub-Header Filters */}
+      <div className="max-w-7xl mx-auto px-8 pt-6 pb-2 relative z-10 flex gap-2">
+         {(['ALL', 'ONSITE', 'VIRTUAL'] as const).map(type => (
+            <button
+               key={type}
+               onClick={() => setDeliveryFilter(type)}
+               className={`px-4 py-1.5 rounded-full text-xs font-semibold tracking-wider transition-colors border ${
+                 deliveryFilter === type
+                 ? 'bg-slate-100 text-slate-900 border-transparent'
+                 : 'bg-transparent text-slate-400 border-white/10 hover:border-white/30 hover:text-white'
+               }`}
+            >
+               {type}
+            </button>
+         ))}
+      </div>
+
       {/* Bento Grid Content */}
-      <main className="max-w-7xl mx-auto px-8 py-10 relative z-10">
+      <main className="max-w-7xl mx-auto px-8 py-6 relative z-10">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <AnimatePresence mode="popLayout">
-            {events
-              .filter(e => activeTab === 'ALL' || e.category === activeTab)
-              .map((event) => (
+            {displayedEvents.map((event) => (
                 <motion.div
                   layout
                   initial={{ opacity: 0, y: 20, scale: 0.95 }}
@@ -210,10 +243,10 @@ export default function WorldClassAggregatorDashboard() {
               ))}
           </AnimatePresence>
 
-          {events.length === 0 && (
+          {displayedEvents.length === 0 && (
              <div className="col-span-full py-20 flex flex-col items-center justify-center text-zinc-500 border border-dashed border-zinc-800 rounded-2xl relative z-10">
                  <Activity className="w-10 h-10 mb-4 opacity-50 animate-pulse" />
-                 <p>Awaiting live intel drops...</p>
+                 <p>Awaiting live intel drops matching filters...</p>
              </div>
           )}
         </div>

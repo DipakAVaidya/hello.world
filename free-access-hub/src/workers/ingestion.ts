@@ -148,54 +148,53 @@ export async function ingestProductHuntRSS() {
     }
 }
 
-export async function ingestDevpostSwag() {
+export async function ingestDevpostAPI() {
     try {
-        console.log("Fetching Devpost hackathons...");
-        const response = await axios.get('https://devpost.com/hackathons?search=open-to-all', {
-            headers: { 'User-Agent': 'Mozilla/5.0' }
+        console.log("Fetching Devpost API...");
+        const response = await axios.get('https://devpost.com/api/hackathons', {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
         });
-        const $ = cheerio.load(response.data);
+
         let count = 0;
+        const hackathons = response.data.hackathons || [];
 
-        const tiles = $('.hackathon-tile').toArray();
-        for (const element of tiles.slice(0, 3)) {
-            const title = $(element).find('.title').text().trim();
-            const url = $(element).find('a').attr('href') || '';
-            const tagsText = $(element).find('.submission-period').text().toLowerCase() || 'swag';
+        for (const h of hackathons.slice(0, 5)) {
+            const title = h.title;
+            const url = h.url;
+            if (!title || !url) continue;
 
-            if (tagsText.includes('free') || tagsText.includes('swag') || tagsText.includes('credits') || title.length > 0) {
-                const spamScore = calculateSpamRating(title, tagsText);
-                if (spamScore > 30) continue;
+            const spamScore = calculateSpamRating(title, '');
+            if (spamScore > 30) continue;
 
-                const id = hashEvent(title, 'Devpost');
-                const eventTimestamp = new Date(Date.now() + 86400000 * 7);
+            const id = hashEvent(title, 'Devpost');
+            const eventTimestamp = new Date(Date.now() + 86400000 * 7);
 
-                const upsertedEvent = await prisma.unifiedEvent.upsert({
-                    where: { id },
-                    update: { updatedAt: new Date(), isActive: true },
-                    create: {
-                        id,
-                        title: `Hackathon Launch: ${title}`,
-                        sourcePlatform: 'Devpost',
-                        category: 'SWAG_GOODIES',
-                        deliveryType: 'VIRTUAL',
-                        perks: ['Developer Swag', 'Cloud Credits'],
-                        eventTimestamp,
-                        registrationUrl: url,
-                        venueName: 'Global Online Submission',
-                        city: 'global',
-                        spamScore
-                    }
-                });
-
-                if (upsertedEvent.createdAt.getTime() === upsertedEvent.updatedAt.getTime() || (Date.now() - upsertedEvent.updatedAt.getTime() < 10000)) {
-                    count++;
-                    await redis.publish('events:live', JSON.stringify({ type: 'NEW_EVENT', data: upsertedEvent }));
+            const upsertedEvent = await prisma.unifiedEvent.upsert({
+                where: { id },
+                update: { updatedAt: new Date(), isActive: true },
+                create: {
+                    id,
+                    title: `Hackathon Launch: ${title}`,
+                    sourcePlatform: 'Devpost',
+                    category: 'SWAG_GOODIES',
+                    deliveryType: 'VIRTUAL',
+                    perks: ['Developer Swag', 'Cloud Credits'],
+                    eventTimestamp,
+                    registrationUrl: url,
+                    venueName: 'Global Online Submission',
+                    city: 'global',
+                    spamScore
                 }
+            });
+
+            if (upsertedEvent.createdAt.getTime() === upsertedEvent.updatedAt.getTime() || (Date.now() - upsertedEvent.updatedAt.getTime() < 10000)) {
+                count++;
+                await redis.publish('events:live', JSON.stringify({ type: 'NEW_EVENT', data: upsertedEvent }));
             }
         }
         return count;
     } catch (err: unknown) {
+        console.error('Devpost API Ingestion blocked ->', (err as Error).message);
         return 0;
     }
 }
@@ -244,6 +243,108 @@ export async function ingestRedditJSON() {
         }
         return count;
     } catch (err: unknown) {
+        console.error('Reddit Ingestion blocked ->', (err as Error).message);
+        return 0;
+    }
+}
+
+export async function ingestGithubIssues() {
+    try {
+        console.log("Fetching GitHub Issues...");
+        const response = await axios.get('https://api.github.com/search/issues?q=label:free-swag+state:open', {
+             headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        const items = response.data.items || [];
+        let count = 0;
+
+        for (const item of items.slice(0, 5)) {
+            if (!item.title || !item.html_url) continue;
+
+            const spamScore = calculateSpamRating(item.title, item.body || '');
+            if (spamScore > 30) continue;
+
+            const id = hashEvent(item.title, 'GitHub');
+            const eventTimestamp = new Date(item.created_at);
+
+            const upsertedEvent = await prisma.unifiedEvent.upsert({
+                where: { id },
+                update: { updatedAt: new Date(), isActive: true },
+                create: {
+                    id,
+                    title: `GitHub Issue: ${item.title}`,
+                    sourcePlatform: 'GitHub',
+                    category: 'SWAG_GOODIES',
+                    deliveryType: 'VIRTUAL',
+                    perks: ['Open Source Swag'],
+                    eventTimestamp,
+                    registrationUrl: item.html_url,
+                    venueName: 'GitHub Repo',
+                    city: 'global',
+                    spamScore
+                }
+            });
+
+            if (upsertedEvent.createdAt.getTime() === upsertedEvent.updatedAt.getTime() || (Date.now() - upsertedEvent.updatedAt.getTime() < 10000)) {
+                count++;
+                await redis.publish('events:live', JSON.stringify({ type: 'NEW_EVENT', data: upsertedEvent }));
+            }
+        }
+        return count;
+    } catch (err: unknown) {
+        console.error('GitHub Ingestion blocked ->', (err as Error).message);
+        return 0;
+    }
+}
+
+export async function ingestHighApe() {
+    try {
+        console.log("Fetching HighApe Free Events...");
+        const response = await axios.get('https://highape.com/bangalore/free-events', {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+        });
+        const $ = cheerio.load(response.data);
+        let count = 0;
+
+        const tiles = $('a[href^="/bangalore/events/"]').toArray();
+        for (const element of tiles.slice(0, 5)) {
+            const urlPath = $(element).attr('href');
+            const title = $(element).find('h3').text().trim();
+
+            if (title && urlPath) {
+                const fullUrl = `https://highape.com${urlPath}`;
+                const spamScore = calculateSpamRating(title, '');
+                if (spamScore > 30) continue;
+
+                const id = hashEvent(title, 'HighApe');
+                const eventTimestamp = new Date(Date.now() + 86400000);
+
+                const upsertedEvent = await prisma.unifiedEvent.upsert({
+                    where: { id },
+                    update: { updatedAt: new Date(), isActive: true },
+                    create: {
+                        id,
+                        title: `${title}`,
+                        sourcePlatform: 'HighApe',
+                        category: 'NIGHTLIFE',
+                        deliveryType: 'ONSITE',
+                        perks: ['Free Entry'],
+                        eventTimestamp,
+                        registrationUrl: fullUrl,
+                        venueName: 'Bangalore Club',
+                        city: 'bangalore',
+                        spamScore
+                    }
+                });
+
+                if (upsertedEvent.createdAt.getTime() === upsertedEvent.updatedAt.getTime() || (Date.now() - upsertedEvent.updatedAt.getTime() < 10000)) {
+                    count++;
+                    await redis.publish('events:live', JSON.stringify({ type: 'NEW_EVENT', data: upsertedEvent }));
+                }
+            }
+        }
+        return count;
+    } catch (err: unknown) {
+        console.error('HighApe Ingestion blocked ->', (err as Error).message);
         return 0;
     }
 }
@@ -253,13 +354,17 @@ const worker = new Worker('ingestion-queue', async job => {
     if (job.name === 'fetch-high-yield') {
         let total = 0;
 
-        total += await ingestDevpostSwag();
+        total += await ingestDevpostAPI();
         await delay(3000);
         total += await ingestRedditJSON();
         await delay(3000);
         total += await ingestHNAlgolia();
         await delay(3000);
         total += await ingestProductHuntRSS();
+        await delay(3000);
+        total += await ingestGithubIssues();
+        await delay(3000);
+        total += await ingestHighApe();
 
         console.log(`Ingestion cycle complete. Published ${total} active events.`);
     } else if (job.name === 'validate-links') {
