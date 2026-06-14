@@ -487,6 +487,68 @@ export async function ingestHighApe() {
     }
 }
 
+export async function ingestMeetupEvents() {
+    try {
+        console.log("Fetching Meetup Events...");
+        const response = await axios.get('https://www.meetup.com/find/?location=Bangalore%2C%20IN&source=EVENTS', {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+        });
+        const $ = cheerio.load(response.data);
+        let count = 0;
+
+        const scripts = $('script[type="application/ld+json"]').toArray();
+        for (const element of scripts) {
+            try {
+                const data = JSON.parse($(element).html() || '[]');
+                if (Array.isArray(data)) {
+                    for (const item of data) {
+                        if (item['@type'] === 'Event' && item.name && item.url) {
+
+                            const spamScore = calculateSpamRating(item.name, '');
+                            if (spamScore > 30) continue;
+
+                            const id = hashEvent(item.name, 'Meetup');
+                            const eventTimestamp = item.startDate ? new Date(item.startDate) : new Date(Date.now() + 86400000);
+                            const deliveryType = item.location?.name ? 'ONSITE' : 'VIRTUAL';
+                            const venueName = item.location?.name || 'Virtual Meetup';
+                            const city = item.location?.address?.addressLocality || 'global';
+
+                            const upsertedEvent = await prisma.unifiedEvent.upsert({
+                                where: { id },
+                                update: { updatedAt: new Date(), isActive: true },
+                                create: {
+                                    id,
+                                    title: `${item.name}`,
+                                    sourcePlatform: 'Meetup',
+                                    category: 'TECH_MEETUP',
+                                    deliveryType,
+                                    perks: ['Networking'],
+                                    eventTimestamp,
+                                    registrationUrl: item.url,
+                                    venueName,
+                                    city: city.toLowerCase(),
+                                    spamScore,
+                                    spotsRemaining: null
+                                }
+                            });
+
+                            if (upsertedEvent.createdAt.getTime() === upsertedEvent.updatedAt.getTime() || (Date.now() - upsertedEvent.updatedAt.getTime() < 10000)) {
+                                count++;
+                                await redis.publish('events:live', JSON.stringify({ type: 'NEW_EVENT', data: upsertedEvent }));
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                // Ignore parse errors on specific scripts
+            }
+        }
+        return count;
+    } catch (err: unknown) {
+        return 0;
+    }
+}
+
 // Queue Processing
 const worker = new Worker('ingestion-queue', async job => {
     if (job.name === 'fetch-high-yield') {
@@ -509,6 +571,8 @@ const worker = new Worker('ingestion-queue', async job => {
         total += await ingestGDGEvents();
         await delay(3000);
         total += await ingestAtlassianEvents();
+        await delay(3000);
+        total += await ingestMeetupEvents();
 
         console.log(`Ingestion cycle complete. Published ${total} active events.`);
     } else if (job.name === 'validate-links') {
