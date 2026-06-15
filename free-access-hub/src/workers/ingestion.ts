@@ -632,7 +632,7 @@ export async function ingestHeadstartEvents() {
                 const id = hashEvent(e.title, 'Headstart');
                 const eventTimestamp = e.starts_at ? new Date(e.starts_at) : new Date(Date.now() + 86400000 * 3);
 
-                const cityObj = e.location?.address_components?.find((c: Record<string, any>) => c.types.includes('locality'));
+                const cityObj = e.location?.address_components?.find((c: { types: string[], long_name: string }) => c.types.includes('locality'));
                 const city = cityObj?.long_name?.toLowerCase() || 'global';
 
                 const upsertedEvent = await prisma.unifiedEvent.upsert({
