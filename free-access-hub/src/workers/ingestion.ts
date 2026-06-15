@@ -608,6 +608,64 @@ export async function ingestHasGeekEvents() {
     }
 }
 
+export async function ingestHeadstartEvents() {
+    try {
+        console.log("Fetching Headstart Events...");
+        const response = await axios.get('https://headstart.in/', {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+        });
+        const $ = cheerio.load(response.data);
+        let count = 0;
+
+        const nextData = $('#__NEXT_DATA__').html();
+        if (nextData) {
+            const parsed = JSON.parse(nextData);
+            const events = parsed.props?.pageProps?.events || [];
+
+            for (const e of events.slice(0, 5)) {
+                if (!e.title || !e.slug) continue;
+
+                const fullUrl = `https://headstart.in/event/${e.slug}`;
+                const spamScore = calculateSpamRating(e.title, '');
+                if (spamScore > 30) continue;
+
+                const id = hashEvent(e.title, 'Headstart');
+                const eventTimestamp = e.starts_at ? new Date(e.starts_at) : new Date(Date.now() + 86400000 * 3);
+
+                const cityObj = e.location?.address_components?.find((c: Record<string, any>) => c.types.includes('locality'));
+                const city = cityObj?.long_name?.toLowerCase() || 'global';
+
+                const upsertedEvent = await prisma.unifiedEvent.upsert({
+                    where: { id },
+                    update: { updatedAt: new Date(), isActive: true },
+                    create: {
+                        id,
+                        title: `${e.title}`,
+                        sourcePlatform: 'Headstart',
+                        category: 'TECH_MEETUP',
+                        deliveryType: 'ONSITE',
+                        perks: ['Startup Network'],
+                        eventTimestamp,
+                        registrationUrl: fullUrl,
+                        venueName: e.location?.name || 'TBA',
+                        city: city,
+                        spamScore,
+                        spotsRemaining: null
+                    }
+                });
+
+                if (upsertedEvent.createdAt.getTime() === upsertedEvent.updatedAt.getTime() || (Date.now() - upsertedEvent.updatedAt.getTime() < 10000)) {
+                    count++;
+                    await redis.publish('events:live', JSON.stringify({ type: 'NEW_EVENT', data: upsertedEvent }));
+                }
+            }
+        }
+        return count;
+    } catch (err: unknown) {
+        return 0;
+    }
+}
+
 // Queue Processing
 const worker = new Worker('ingestion-queue', async job => {
     if (job.name === 'fetch-high-yield') {
@@ -634,6 +692,8 @@ const worker = new Worker('ingestion-queue', async job => {
         total += await ingestMeetupEvents();
         await delay(3000);
         total += await ingestHasGeekEvents();
+        await delay(3000);
+        total += await ingestHeadstartEvents();
 
         console.log(`Ingestion cycle complete. Published ${total} active events.`);
     } else if (job.name === 'validate-links') {

@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Gift, MapPin, Activity, Search, Filter } from 'lucide-react';
-import { formatDistanceToNow } from "date-fns";
 
 type UIEvent = {
   id: string;
@@ -14,6 +13,7 @@ type UIEvent = {
   eventTimestamp: string;
   registrationUrl: string;
   city?: string | null;
+  spotsRemaining?: number | null;
 };
 
 export default function WorldClassAggregatorDashboard() {
@@ -225,6 +225,11 @@ export default function WorldClassAggregatorDashboard() {
                       <div className="flex items-center space-x-1.5 text-xs font-medium font-mono text-slate-400">
                         <MapPin className="text-slate-500" size={12}/>
                         <span className="truncate max-w-[120px] capitalize">{event.city || event.deliveryType}</span>
+                        {event.spotsRemaining !== null && event.spotsRemaining !== undefined && (
+                           <span className="text-amber-400 text-[10px] ml-2 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 whitespace-nowrap">
+                             {event.spotsRemaining} SPOTS LEFT
+                           </span>
+                        )}
                       </div>
                     </div>
 
