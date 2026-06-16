@@ -17,21 +17,22 @@ enum EventCategory {
   TECH_MEETUP
   SWAG_GOODIES
   NIGHTLIFE
+  AI_TOOLS
 }
 
 model UnifiedEvent {
   id               String        @id @default(uuid())
   title            String
   description      String?
-  sourcePlatform   String        // "GDG", "CNCF", "Luma", "Reddit"
+  sourcePlatform   String        // "GDG", "CNCF", "Luma", "Reddit", "HuggingFace", "OpenRouter"
   category         EventCategory
   deliveryType     DeliveryType
-  perks            String[]      // ["Free Food", "Swag Kit", "AWS Credits"]
+  perks            String[]      // ["Free Food", "Swag Kit", "AWS Credits", "Free API Tokens"]
   eventTimestamp   DateTime
   registrationUrl  String
 
   // Location Metrics
-  venueName        String?       // "Microsoft Signature Office", "Zoom Link"
+  venueName        String?       // "Microsoft Signature Office", "Zoom Link", "Global API Portal"
   latitude         Float?
   longitude        Float?
   city             String?       // Normalized lowercase index
@@ -41,6 +42,11 @@ model UnifiedEvent {
   gateClosureTime  DateTime?
   isActive         Boolean       @default(true)
   spamScore        Int           @default(0)
+
+  // New AI Specific Fields
+  mediaType        String?       // "VIDEO", "AUDIO_TTS", "TEXT_REASONING", "DEVELOPER_API"
+  isFreeTierActive Boolean?      @default(true)
+
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 

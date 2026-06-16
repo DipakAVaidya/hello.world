@@ -56,7 +56,8 @@ export async function validateActiveLinks(): Promise<void> {
 export async function ingestHNAlgolia() {
     try {
         console.log("Fetching HN Algolia...");
-        const response = await axios.get('https://hn.algolia.com/api/v1/search?query=swag%20free', {
+        // Modified query to capture broader AI launches
+        const response = await axios.get('https://hn.algolia.com/api/v1/search?query=(swag OR "free credits" OR "launch hn" OR "free api")', {
             headers: { 'User-Agent': 'Mozilla/5.0' }
         });
         const hits = response.data.hits;
@@ -73,6 +74,9 @@ export async function ingestHNAlgolia() {
             const id = hashEvent(title, 'HackerNews');
             const eventTimestamp = new Date(hit.created_at);
 
+            // Basic categorization based on title context
+            const isAI = title.toLowerCase().includes('ai') || title.toLowerCase().includes('model') || title.toLowerCase().includes('llm');
+
             const upsertedEvent = await prisma.unifiedEvent.upsert({
                 where: { id },
                 update: { updatedAt: new Date(), isActive: true },
@@ -80,13 +84,14 @@ export async function ingestHNAlgolia() {
                     id,
                     title,
                     sourcePlatform: 'HackerNews',
-                    category: 'TECH_MEETUP',
+                    category: isAI ? 'AI_TOOLS' : 'TECH_MEETUP',
                     deliveryType: 'VIRTUAL',
-                    perks: ['Open Source Swag'],
+                    perks: isAI ? ['Free AI Credits', 'Launch'] : ['Open Source Swag'],
                     eventTimestamp,
                     registrationUrl: url,
                     venueName: 'Hacker News Thread',
                     city: 'global',
+                    mediaType: isAI ? 'DEVELOPER_API' : null,
                     spamScore
                 }
             });
@@ -117,6 +122,8 @@ export async function ingestProductHuntRSS() {
             const id = hashEvent(item.title, 'ProductHunt');
             const eventTimestamp = item.pubDate ? new Date(item.pubDate) : new Date();
 
+            const isAI = item.title.toLowerCase().includes('ai') || (item.contentSnippet || '').toLowerCase().includes('ai');
+
             const upsertedEvent = await prisma.unifiedEvent.upsert({
                 where: { id },
                 update: { updatedAt: new Date(), isActive: true },
@@ -124,7 +131,7 @@ export async function ingestProductHuntRSS() {
                     id,
                     title: `PH Launch: ${item.title}`,
                     sourcePlatform: 'ProductHunt',
-                    category: 'SWAG_GOODIES',
+                    category: isAI ? 'AI_TOOLS' : 'SWAG_GOODIES',
                     deliveryType: 'VIRTUAL',
                     perks: ['Beta Access', 'Credits'],
                     eventTimestamp,
@@ -666,34 +673,128 @@ export async function ingestHeadstartEvents() {
     }
 }
 
+export async function ingestHuggingFace() {
+    try {
+        console.log("Fetching Hugging Face Models...");
+        const response = await axios.get('https://huggingface.co/api/models?sort=createdAt&limit=5', {
+             headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        let count = 0;
+
+        for (const model of response.data) {
+            if (!model.id) continue;
+
+            const id = hashEvent(model.id, 'HuggingFace');
+            const eventTimestamp = new Date(model.createdAt);
+
+            const upsertedEvent = await prisma.unifiedEvent.upsert({
+                where: { id },
+                update: { updatedAt: new Date(), isActive: true },
+                create: {
+                    id,
+                    title: `New Model: ${model.id}`,
+                    sourcePlatform: 'HuggingFace',
+                    category: 'AI_TOOLS',
+                    deliveryType: 'VIRTUAL',
+                    perks: ['Open Source Model'],
+                    eventTimestamp,
+                    registrationUrl: `https://huggingface.co/${model.id}`,
+                    venueName: 'HF Hub',
+                    city: 'global',
+                    mediaType: 'TEXT_REASONING',
+                    isFreeTierActive: true
+                }
+            });
+
+            if (upsertedEvent.createdAt.getTime() === upsertedEvent.updatedAt.getTime() || (Date.now() - upsertedEvent.updatedAt.getTime() < 10000)) {
+                count++;
+                await redis.publish('events:live', JSON.stringify({ type: 'NEW_EVENT', data: upsertedEvent }));
+            }
+        }
+        return count;
+    } catch (err: unknown) {
+        return 0;
+    }
+}
+
+export async function ingestOpenRouter() {
+    try {
+        console.log("Fetching OpenRouter Free Models...");
+        const response = await axios.get('https://openrouter.ai/api/v1/models', {
+             headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+
+        const freeModels = response.data.data.filter((m: { pricing?: { prompt?: string } }) => m.pricing?.prompt === "0").slice(0, 5);
+        let count = 0;
+
+        for (const model of freeModels) {
+            if (!model.id || !model.name) continue;
+
+            const id = hashEvent(model.id, 'OpenRouter');
+            const eventTimestamp = new Date(model.created * 1000);
+
+            const upsertedEvent = await prisma.unifiedEvent.upsert({
+                where: { id },
+                update: { updatedAt: new Date(), isActive: true },
+                create: {
+                    id,
+                    title: `Free API: ${model.name}`,
+                    sourcePlatform: 'OpenRouter',
+                    category: 'AI_TOOLS',
+                    deliveryType: 'VIRTUAL',
+                    perks: ['Free API Tokens'],
+                    eventTimestamp,
+                    registrationUrl: `https://openrouter.ai/models/${model.id}`,
+                    venueName: 'OpenRouter API',
+                    city: 'global',
+                    mediaType: 'DEVELOPER_API',
+                    isFreeTierActive: true
+                }
+            });
+
+            if (upsertedEvent.createdAt.getTime() === upsertedEvent.updatedAt.getTime() || (Date.now() - upsertedEvent.updatedAt.getTime() < 10000)) {
+                count++;
+                await redis.publish('events:live', JSON.stringify({ type: 'NEW_EVENT', data: upsertedEvent }));
+            }
+        }
+        return count;
+    } catch (err: unknown) {
+        return 0;
+    }
+}
+
 // Queue Processing
 const worker = new Worker('ingestion-queue', async job => {
     if (job.name === 'fetch-high-yield') {
         let total = 0;
 
         total += await ingestDevpostAPI();
-        await delay(3000);
+        await delay(2000);
         total += await ingestRedditJSON();
-        await delay(3000);
+        await delay(2000);
         total += await ingestHNAlgolia();
-        await delay(3000);
+        await delay(2000);
         total += await ingestProductHuntRSS();
-        await delay(3000);
+        await delay(2000);
         total += await ingestGithubIssues();
-        await delay(3000);
+        await delay(2000);
         total += await ingestHighApe();
-        await delay(3000);
+        await delay(2000);
         total += await ingestCNCFEvents();
-        await delay(3000);
+        await delay(2000);
         total += await ingestGDGEvents();
-        await delay(3000);
+        await delay(2000);
         total += await ingestAtlassianEvents();
-        await delay(3000);
+        await delay(2000);
         total += await ingestMeetupEvents();
-        await delay(3000);
+        await delay(2000);
         total += await ingestHasGeekEvents();
-        await delay(3000);
+        await delay(2000);
         total += await ingestHeadstartEvents();
+        await delay(2000);
+        total += await ingestHuggingFace();
+        await delay(2000);
+        total += await ingestOpenRouter();
 
         console.log(`Ingestion cycle complete. Published ${total} active events.`);
     } else if (job.name === 'validate-links') {
